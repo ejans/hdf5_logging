@@ -56,15 +56,23 @@ local hdf5 = require"array"
 -- global state
 filename=nil
 file=nil
-pconf=nil
-gconf=nil
-pvconf=nil
+group=nil
+tot_conf
 fd=nil
 
 -- sample_conf={
 --    { blockname='blockA', portname="port1", buff_len=10, },
 --    { blockname='blockB', portname=true, buff_len=10 }, -- report all
 --}
+
+-- sample_conf={
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.x", dataset_name="/LinearVelocity/x", dataset_type="double", group_name="/State/Twist"},
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.y", dataset_name="/LinearVelocity/y", dataset_type="double", group_name="/State/Twist"},
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.z", dataset_name="/LinearVelocity/z", dataset_type="double", group_name="/State/Twist"},
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.x", dataset_name="/LinearVelocity/x", dataset_type="double", group_name="/State/Twist"},
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.y", dataset_name="/LinearVelocity/y", dataset_type="double", group_name="/State/Twist"},
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.z", dataset_name="/LinearVelocity/z", dataset_type="double", group_name="/State/Twist"},
+-- }
 
 local ts1=ffi.new("struct ubx_timespec")
 local ns_per_s = 1000000000
@@ -80,6 +88,20 @@ end
 function create_read_sample(p, ni)
    return ubx.data_alloc(ni, p.out_type_name, p.out_data_len)
 end
+
+--- convert the conf string to a table.
+-- @param conf str
+-- @param ni node_info
+-- @return tot_conf table
+local function conf_to_tot_conflist(c, this)
+   local ni = this.ni
+   
+   local succ, res = utils.eval_sandbox("return "..c)
+   if not succ then error("hdf5_logger: failed to load conf:\n"..res) end
+
+   for i,conf in ipairs(res) do
+      local bname, pname, dsname, dstype, gname = ts(conf.blockname), ts(conf.port_name
+      --- TODO implement here!
 
 --- convert the port_conf string to a table.
 -- @param port_conf str
@@ -183,6 +205,15 @@ local function group_conf_to_grouplist(gc, this)
    return res
 end
 
+local function pvtds_to_pvtdslist(pvc, this)
+   local ni = this.ni
+
+   local succ, res = utils.eval_sandbox("return"..gc)
+   if not succ then error("file_logger: failed to load group_conf:\n"..res) end
+
+   --- TODO implement!
+end
+
 --- init: parse config and create port and connections.
 function init(b)
    b=ffi.cast("ubx_block_t*", b)
@@ -267,6 +298,7 @@ function step(b)
    fd:write("\n")
    ]]--
    --- TODO get time (this will need to be specifiable from outside --> maybe separate block?)
+   --- TODO create group according to time
    if timestamp~=0 then
       group = file:create_group(("%f, "):format(get_time()))
    end
@@ -278,14 +310,17 @@ function step(b)
    --- TODO get data from specified ports and write to specified datasets
    ---		|-> create dataset from specific value of port given in pvconf
    ---		|-> create buffer according to data 
+   ---		|-> create space according to data size
    ---		|-> get data from port to buffer
    ---		|-> write data from buffer to dataset
    for i=1,#pconf do
       if ubx.port_read(pconf[i].pinv, pconf[i].sample) < 0 then
          print("hdf5_logger error: failed to read "..pconf.blockname.."."..pconf.portname)
       else
-         pconf[i].serfun(
-
+         pconf[i].serfun(pconf[i].sample_cdata, fd)
+         if i<#pconf then fd:write(", ") end
+      end
+   end
 
    for i=1,#pvconf do
 
@@ -295,12 +330,12 @@ end
 --- cleanup
 function cleanup(b)
    --io.close(fd)
-   --- TODO close file
    print("closing file")
    file:flush_file()
    fd=nil
    filename=nil
    file=nil
+   group=nil
    pconf=nil
    gconf=nil
    pvconf=nil
