@@ -55,6 +55,7 @@ local hdf5 = require"array"
 
 -- global state
 filename=nil
+file=nil
 pconf=nil
 gconf=nil
 pvconf=nil
@@ -143,7 +144,7 @@ local function group_conf_to_grouplist(gc, this)
    for i,conf in ipairs(res) do
       --local bname, pname = ts(conf.blockname), ts(conf.portname)
       local gname = ts(conf.groupname)
-      --- TODO these groupnames have to be sent to the c part to create the groups
+      --- TODO put groupnames in table
 
       local b = ubx.block_get(ni, bname)
       if b==nil then
@@ -181,6 +182,7 @@ local function group_conf_to_grouplist(gc, this)
 
    return res
 end
+
 --- init: parse config and create port and connections.
 function init(b)
    b=ffi.cast("ubx_block_t*", b)
@@ -215,19 +217,17 @@ function init(b)
    -- print(('file_logger.init: reporting to file="%s", sep="%s", conf=%s'):format(filename, separator, rconf_str))
    print(('file_logger: reporting to file="%s", sep="%s"'):format(filename, separator))
 
-   pconf = portconf_to_portlist(pconf_str, b)
+   pconf = port_conf_to_portlist(pconf_str, b)
    --- TODO add new functions for groups and portvartodataset
-   gconf = groupconf_to_grouplist(gconf_str, b)
+   gconf = group_conf_to_grouplist(gconf_str, b)
    pvconf = pvtds_to_pvtdslist(pvconf_str, b)
-
-   --- TODO we don't have to open a file, we will use functions of our cpp file her to open.
-   fd=io.open(filename, 'w+') -- trunc
-   fd:setvbuf("line")
    return true
 end
 
---- start: write header
+--- start: create new hdf5 file
 function start(b)
+
+   --[[
    b=ffi.cast("ubx_block_t*", b)
    ubx.ffi_load_types(b.ni)
 
@@ -241,11 +241,15 @@ function start(b)
    end
 
    fd:write("\n")
+   ]]--
+   print("creating file")
+   file = hdf5.create_file(filename)
    return true
 end
 
 --- step: read ports and write values
 function step(b)
+   --[[
    b=ffi.cast("ubx_block_t*", b)
 
    if timestamp~=0 then
@@ -261,13 +265,42 @@ function step(b)
       end
    end
    fd:write("\n")
+   ]]--
+   --- TODO get time (this will need to be specifiable from outside --> maybe separate block?)
+   if timestamp~=0 then
+      group = file:create_group(("%f, "):format(get_time()))
+   end
+   
+   --- TODO create groups within group created according to time
+   for i=1,#gconf do
+      group:create_group(gconf[i])
+   end
+   --- TODO get data from specified ports and write to specified datasets
+   ---		|-> create dataset from specific value of port given in pvconf
+   ---		|-> create buffer according to data 
+   ---		|-> get data from port to buffer
+   ---		|-> write data from buffer to dataset
+   for i=1,#pconf do
+      if ubx.port_read(pconf[i].pinv, pconf[i].sample) < 0 then
+         print("hdf5_logger error: failed to read "..pconf.blockname.."."..pconf.portname)
+      else
+         pconf[i].serfun(
+
+
+   for i=1,#pvconf do
+
+   end
 end
 
 --- cleanup
 function cleanup(b)
-   io.close(fd)
+   --io.close(fd)
+   --- TODO close file
+   print("closing file")
+   file:flush_file()
    fd=nil
    filename=nil
+   file=nil
    pconf=nil
    gconf=nil
    pvconf=nil
