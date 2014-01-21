@@ -41,8 +41,6 @@ file:flush_file()
 --io.read()
 ]]--
 
---- Original code of file logger --> already edited a bit
-
 local ubx=require("ubx")
 local ubx_utils = require("ubx_utils")
 local utils = require("utils")
@@ -57,7 +55,7 @@ local hdf5 = require"array"
 filename=nil
 file=nil
 group=nil
-tot_conf
+tot_conf=nil
 fd=nil
 
 -- sample_conf={
@@ -66,12 +64,12 @@ fd=nil
 --}
 
 -- sample_conf={
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.x", dataset_name="/LinearVelocity/x", dataset_type="double", group_name="/State/Twist"},
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.y", dataset_name="/LinearVelocity/y", dataset_type="double", group_name="/State/Twist"},
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.z", dataset_name="/LinearVelocity/z", dataset_type="double", group_name="/State/Twist"},
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.x", dataset_name="/LinearVelocity/x", dataset_type="double", group_name="/State/Twist"},
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.y", dataset_name="/LinearVelocity/y", dataset_type="double", group_name="/State/Twist"},
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.z", dataset_name="/LinearVelocity/z", dataset_type="double", group_name="/State/Twist"},
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.x", dataset_name="x", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.y", dataset_name="y", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.z", dataset_name="z", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.x", dataset_name="x", dataset_type="double", group_name="/State/Twist/RotationalVelocity/"},
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.y", dataset_name="y", dataset_type="double", group_name="/State/Twist/RotationalVelocity/"},
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.z", dataset_name="z", dataset_type="double", group_name="/State/Twist/RotationalVelocity/"},
 -- }
 
 local ts1=ffi.new("struct ubx_timespec")
@@ -100,41 +98,30 @@ local function conf_to_tot_conflist(c, this)
    if not succ then error("hdf5_logger: failed to load conf:\n"..res) end
 
    for i,conf in ipairs(res) do
-      local bname, pname, dsname, dstype, gname = ts(conf.blockname), ts(conf.port_name
+      local bname, pname, pvar, dsname, dstype, gname = ts(conf.blockname), ts(conf.portname), ts(conf.port_var), ts(conf.dataset_name), ts(conf.dataset_type), ts(conf.group_name)
       --- TODO implement here!
 
---- convert the port_conf string to a table.
--- @param port_conf str
--- @param ni node_info
--- @return pconf table with inv. conn. ports
-local function port_conf_to_portlist(pc, this)
-   local ni = this.ni
-
-   local succ, res = utils.eval_sandbox("return "..pc)
-   if not succ then error("file_logger: failed to load port_conf:\n"..res) end
-
-   for i,conf in ipairs(res) do
-      local bname, pname = ts(conf.blockname), ts(conf.portname)
-
+      --- get block
       local b = ubx.block_get(ni, bname)
       if b==nil then
-	 print("file_logger error: no block "..bname.." found")
+         print("hdf5_logger error: no block "..bname.." found")
 	 return false
       end
+      --- get port
       local p = ubx.port_get(b, pname)
       if p==nil then
-	 print("file_logger error: block "..bname.." has no port "..pname)
+	 print("hdf5_logger error: block "..bname.." has no port "..pname)
 	 return false
       end
-
+      --- set buffer length if not specified
       if conf.buff_len==nil or conf.buff_len <=0 then
 	 conf.buff_len=1
       end
-
-      if p.out_type~=nil then
+      --- add port
+      if p.out_type~=nil then --- if port out type is not nil
 	 local blockport = bname.."."..pname
 	 local p_rep_name=ts(i)
-	 print("file_logger: reporting "..blockport.." as "..p_rep_name)
+	 print("hdf5_logger: reporting "..blockport.." as "..p_rep_name)
 	 ubx.port_add(this, p_rep_name, nil, p.out_type_name, p.out_data_len, nil, 0, 0)
 	 ubx.conn_lfds_cyclic(b, pname, this, p_rep_name, conf.buff_len)
 
@@ -143,7 +130,7 @@ local function port_conf_to_portlist(pc, this)
 	 conf.sample_cdata = ubx.data_to_cdata(conf.sample)
 	 conf.serfun=cdata.gen_logfun(ubx.data_to_ctype(conf.sample), blockport)
       else
-	 print("ERR: file_logger: refusing to report in-port ", bname.."."..pname)
+	 print("ERR: hdf5_logger: refusing to report in-port ", bname.."."..pname)
       end
    end
 
@@ -151,67 +138,6 @@ local function port_conf_to_portlist(pc, this)
    for _,conf in ipairs(res) do conf.pinv=ubx.port_get(this, conf.pname) end
 
    return res
-end
-
---- convert the group_conf string to a table.
--- @param group_conf str
--- @param ni node_info
--- @return gconf table with groups
-local function group_conf_to_grouplist(gc, this)
-   local ni = this.ni
-
-   local succ, res = utils.eval_sandbox("return "..gc)
-   if not succ then error("file_logger: failed to load group_conf:\n"..res) end
-
-   for i,conf in ipairs(res) do
-      --local bname, pname = ts(conf.blockname), ts(conf.portname)
-      local gname = ts(conf.groupname)
-      --- TODO put groupnames in table
-
-      local b = ubx.block_get(ni, bname)
-      if b==nil then
-	 print("file_logger error: no block "..bname.." found")
-	 return false
-      end
-      local p = ubx.port_get(b, pname)
-      if p==nil then
-	 print("file_logger error: block "..bname.." has no port "..pname)
-	 return false
-      end
-
-      if conf.buff_len==nil or conf.buff_len <=0 then
-	 conf.buff_len=1
-      end
-
-      if p.out_type~=nil then
-	 local blockport = bname.."."..pname
-	 local p_rep_name=ts(i)
-	 print("file_logger: reporting "..blockport.." as "..p_rep_name)
-	 ubx.port_add(this, p_rep_name, nil, p.out_type_name, p.out_data_len, nil, 0, 0)
-	 ubx.conn_lfds_cyclic(b, pname, this, p_rep_name, conf.buff_len)
-
-	 conf.pname = p_rep_name
-	 conf.sample=create_read_sample(p, ni)
-	 conf.sample_cdata = ubx.data_to_cdata(conf.sample)
-	 conf.serfun=cdata.gen_logfun(ubx.data_to_ctype(conf.sample), blockport)
-      else
-	 print("ERR: file_logger: refusing to report in-port ", bname.."."..pname)
-      end
-   end
-
-   -- cache port ptr's (only *after* adding has finished (realloc!)
-   for _,conf in ipairs(res) do conf.pinv=ubx.port_get(this, conf.pname) end
-
-   return res
-end
-
-local function pvtds_to_pvtdslist(pvc, this)
-   local ni = this.ni
-
-   local succ, res = utils.eval_sandbox("return"..gc)
-   if not succ then error("file_logger: failed to load group_conf:\n"..res) end
-
-   --- TODO implement!
 end
 
 --- init: parse config and create port and connections.
@@ -219,39 +145,20 @@ function init(b)
    b=ffi.cast("ubx_block_t*", b)
    ubx.ffi_load_types(b.ni)
 
-   --- port_conf
-   local pconf_str = ubx.data_tolua(ubx.config_get_data(b, "port_conf"))
+   --- tot_conf
+   local tot_conf_str = ubx.data_tolua(ubx.config_get_data(b, "conf"))
 
-   if pconf_str == 0 then
-      print(ubx.safe_tostr(b.name)..": invalid/nonexisting port_conf")
-      return false
-   end
-
-   --- group_conf
-   local gconf_str = ubx.data_tolua(ubx.config_get_data(b, "group_conf"))
-
-   if gconf_str == 0 then
-      print(ubx.safe_tostr(b.name)..": invalid/nonexisting group_conf")
-      return false
-   end
-
-   --- port_var_to_dataset_conf
-   local pvconf_str = ubx.data_tolua(ubx.config_get_data(b, "port_var_to_dataset_conf"))
-
-   if pvconf_str == 0 then
-      print(ubx.safe_tostr(b.name)..": invalid/nonexisting port_var_to_dataset_conf")
+   if tot_conf_str == 0 then
+      print(ubx.safe_tostr(b.name)..": invalid/nonexisting conf")
       return false
    end
 
    filename = ubx.data_tolua(ubx.config_get_data(b, "filename"))
 
    -- print(('file_logger.init: reporting to file="%s", sep="%s", conf=%s'):format(filename, separator, rconf_str))
-   print(('file_logger: reporting to file="%s", sep="%s"'):format(filename, separator))
+   print(('file_logger: reporting to file="%s"'):format(filename))
 
-   pconf = port_conf_to_portlist(pconf_str, b)
-   --- TODO add new functions for groups and portvartodataset
-   gconf = group_conf_to_grouplist(gconf_str, b)
-   pvconf = pvtds_to_pvtdslist(pvconf_str, b)
+   tot_conf = port_conf_to_portlist(tot_conf_str, b)
    return true
 end
 
@@ -336,7 +243,5 @@ function cleanup(b)
    filename=nil
    file=nil
    group=nil
-   pconf=nil
-   gconf=nil
-   pvconf=nil
+   tot_conf=nil
 end
