@@ -80,6 +80,37 @@ function get_time()
    return tonumber(ts1.sec) + tonumber(ts1.nsec) / ns_per_s
 end
 
+function existsobject(f,g)
+   f:exists_object(g)
+end
+
+function checkforgroup(f,g)
+   if pcall(existsobject,f,g) then
+      return true
+   else
+      return false
+   end
+end
+
+function creategroups(f,gs)
+   local i,j=0
+   while j~=string.len(gs) do
+      if i==0 then
+         i=string.find(gs,"/")
+      else
+         i=j
+      end
+      j=string.find(gs,"/",i+1)
+      local sub=string.sub(gs,i+1,j-1)
+      print(sub)
+      if checkforgroup(f,sub) then
+      else
+         f=f:create_group(sub)
+      end   
+   end
+   return f
+end
+
 --- For the given port, create a ubx_data to hold the result of a read.
 -- @param port
 -- @return ubx_data_t sample
@@ -207,12 +238,12 @@ function step(b)
    --- TODO get time (this will need to be specifiable from outside --> maybe separate block?)
    --- TODO create group according to time
    if timestamp~=0 then
-      group = file:create_group(("%f, "):format(get_time()))
+      local group = file:create_group(("%f, "):format(get_time()))
    end
    
    --- TODO create groups within group created according to time
-   for i=1,#gconf do
-      group:create_group(gconf[i])
+   for i=1,#tot_conf.group_name do
+      creategroups(group, tot_conf.group_name[i])
    end
    --- TODO get data from specified ports and write to specified datasets
    ---		|-> create dataset from specific value of port given in pvconf
@@ -220,6 +251,18 @@ function step(b)
    ---		|-> create space according to data size
    ---		|-> get data from port to buffer
    ---		|-> write data from buffer to dataset
+   for i=1,#tot_conf.block_name do
+      local buf = ffi.new(tot_conf.dataset_type[i],||dataFromPort||)
+      local space = hdf5.create_simple_space({1,||sizeOfDataFromPort||}) --- will we have multiple dimension (3+) data?
+      group = group:open_group(tot_conf.group_name[i])
+      -- TODO link the dataset_type to a hdf5 set:
+      --       |-> switch with mapping from double to hdf5.double ...
+      local datatype = hdf5.double
+      local dataset = group:create_dataset(tot_conf.dataset_name[i], datatype, space)
+      dataset:write(buf,datatype)
+   end
+      
+   --[[
    for i=1,#pconf do
       if ubx.port_read(pconf[i].pinv, pconf[i].sample) < 0 then
          print("hdf5_logger error: failed to read "..pconf.blockname.."."..pconf.portname)
@@ -228,10 +271,7 @@ function step(b)
          if i<#pconf then fd:write(", ") end
       end
    end
-
-   for i=1,#pvconf do
-
-   end
+   ]]--
 end
 
 --- cleanup
