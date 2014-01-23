@@ -49,11 +49,12 @@ local ffi = require("ffi")
 local time = require("time")
 local ts = tostring
 local strict = require"strict"
-local hdf5 = require"array"
+local hdf5 = require"hdf5"
 
 -- global state
 filename=nil
 file=nil
+timestamp=nil
 group=nil
 tot_conf=nil
 fd=nil
@@ -102,6 +103,8 @@ function creategroups(f,gs)
       end
       j=string.find(gs,"/",i+1)
       local sub=string.sub(gs,i+1,j-1)
+      --- TODO DEBUG
+      print(f)
       print(sub)
       if checkforgroup(f,sub) then
       else
@@ -114,24 +117,25 @@ end
 --- For the given port, create a ubx_data to hold the result of a read.
 -- @param port
 -- @return ubx_data_t sample
+-- TODO Usefull?
 function create_read_sample(p, ni)
    return ubx.data_alloc(ni, p.out_type_name, p.out_data_len)
 end
 
---- convert the conf string to a table.
+--- convert the conf string to a table (save in global states and add ports).
 -- @param conf str
 -- @param ni node_info
 -- @return tot_conf table
-local function conf_to_tot_conflist(c, this)
+local function port_conf_to_conflist(c, this)
    local ni = this.ni
    
    local succ, res = utils.eval_sandbox("return "..c)
-   if not succ then error("hdf5_logger: failed to load conf:\n"..res) end
+   if not succ then error("hdf5_logger: failed to load report_conf:\n"..res) end
 
    for i,conf in ipairs(res) do
       local bname, pname, pvar, dsname, dstype, gname = ts(conf.blockname), ts(conf.portname), ts(conf.port_var), ts(conf.dataset_name), ts(conf.dataset_type), ts(conf.group_name)
+      
       --- TODO implement here!
-
       --- get block
       local b = ubx.block_get(ni, bname)
       if b==nil then
@@ -157,6 +161,7 @@ local function conf_to_tot_conflist(c, this)
 	 ubx.conn_lfds_cyclic(b, pname, this, p_rep_name, conf.buff_len)
 
 	 conf.pname = p_rep_name
+	 -- TODO ubx_data_t argument is nil
 	 conf.sample=create_read_sample(p, ni)
 	 conf.sample_cdata = ubx.data_to_cdata(conf.sample)
 	 conf.serfun=cdata.gen_logfun(ubx.data_to_ctype(conf.sample), blockport)
@@ -177,19 +182,20 @@ function init(b)
    ubx.ffi_load_types(b.ni)
 
    --- tot_conf
-   local tot_conf_str = ubx.data_tolua(ubx.config_get_data(b, "conf"))
+   local tot_conf_str = ubx.data_tolua(ubx.config_get_data(b, "report_conf"))
 
    if tot_conf_str == 0 then
-      print(ubx.safe_tostr(b.name)..": invalid/nonexisting conf")
+      print(ubx.safe_tostr(b.name)..": invalid/nonexisting report_conf")
       return false
    end
 
    filename = ubx.data_tolua(ubx.config_get_data(b, "filename"))
+   timestamp = ubx.data_tolua(ubx.config_get_data(b, "timestamp"))
 
    -- print(('file_logger.init: reporting to file="%s", sep="%s", conf=%s'):format(filename, separator, rconf_str))
    print(('file_logger: reporting to file="%s"'):format(filename))
 
-   tot_conf = port_conf_to_portlist(tot_conf_str, b)
+   tot_conf = port_conf_to_conflist(tot_conf_str, b)
    return true
 end
 
@@ -238,12 +244,13 @@ function step(b)
    --- TODO get time (this will need to be specifiable from outside --> maybe separate block?)
    --- TODO create group according to time
    if timestamp~=0 then
-      local group = file:create_group(("%f, "):format(get_time()))
+      group = file:create_group(("%f, "):format(get_time()))
    end
    
    --- TODO create groups within group created according to time
-   for i=1,#tot_conf.group_name do
-      creategroups(group, tot_conf.group_name[i])
+   --for i=1,#tot_conf.group_name do
+   for i=1,#tot_conf do
+      creategroups(group, tot_conf[i].group_name)
    end
    --- TODO get data from specified ports and write to specified datasets
    ---		|-> create dataset from specific value of port given in pvconf
@@ -251,6 +258,9 @@ function step(b)
    ---		|-> create space according to data size
    ---		|-> get data from port to buffer
    ---		|-> write data from buffer to dataset
+
+   --- TODO Commented!
+   --[[
    for i=1,#tot_conf.block_name do
       local buf = ffi.new(tot_conf.dataset_type[i],||dataFromPort||)
       local space = hdf5.create_simple_space({1,||sizeOfDataFromPort||}) --- will we have multiple dimension (3+) data?
@@ -261,6 +271,7 @@ function step(b)
       local dataset = group:create_dataset(tot_conf.dataset_name[i], datatype, space)
       dataset:write(buf,datatype)
    end
+   ]]--
       
    --[[
    for i=1,#pconf do
