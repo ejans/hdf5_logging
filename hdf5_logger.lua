@@ -55,6 +55,7 @@ local hdf5 = require"hdf5"
 filename=nil
 file=nil
 timestamp=nil
+base_group=nil
 group=nil
 tot_conf=nil
 fd=nil
@@ -95,18 +96,19 @@ end
 
 function creategroups(f,gs)
    local i,j=0
+   local sub
+
    while j~=string.len(gs) do
+
       if i==0 then
          i=string.find(gs,"/")
       else
          i=j
       end
       j=string.find(gs,"/",i+1)
-      local sub=string.sub(gs,i+1,j-1)
-      --- TODO DEBUG
-      print(f)
-      print(sub)
+      sub=string.sub(gs,i+1,j-1)
       if checkforgroup(f,sub) then
+         f=f:open_group(sub)
       else
          f=f:create_group(sub)
       end   
@@ -244,13 +246,15 @@ function step(b)
    --- TODO get time (this will need to be specifiable from outside --> maybe separate block?)
    --- TODO create group according to time
    if timestamp~=0 then
-      group = file:create_group(("%f, "):format(get_time()))
+      base_group = file:create_group(("%f, "):format(get_time()))
    end
    
    --- TODO create groups within group created according to time
    --for i=1,#tot_conf.group_name do
    for i=1,#tot_conf do
-      creategroups(group, tot_conf[i].group_name)
+      print("creating groups: "..tot_conf[i].group_name)
+      group = creategroups(base_group, tot_conf[i].group_name)
+      -- TODO create dataset inside this group
    end
    --- TODO get data from specified ports and write to specified datasets
    ---		|-> create dataset from specific value of port given in pvconf
@@ -294,5 +298,6 @@ function cleanup(b)
    filename=nil
    file=nil
    group=nil
+   base_group=nil
    tot_conf=nil
 end
