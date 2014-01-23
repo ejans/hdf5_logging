@@ -255,6 +255,17 @@ function step(b)
       print("creating groups: "..tot_conf[i].group_name)
       group = creategroups(base_group, tot_conf[i].group_name)
       -- TODO create dataset inside this group
+      if ubx.port_read(tot_conf[i].pinv, tot_conf[i].sample) < 0 then
+         print("hdf5_logger error: failed to read"..tot_conf.blockname.."."..tot_conf.portname)
+      end
+      --local buf = ffi.new(tot_conf[i].dataset_type, ubx.port_read(tot_conf[i].pinv, tot_conf[i].sample))
+      local buf = ffi.new("double[1]", ubx.port_read(tot_conf[i].pinv, tot_conf[i].sample))
+      local space = hdf5.create_simple_space({1,1})
+      --local datatype = hdf5.double
+      --local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
+      local dataset = group:create_dataset(tot_conf[i].dataset_name, hdf5.double, space)
+      --dataset:write(buf, datatype)
+      dataset:write(buf, hdf5.double)
    end
    --- TODO get data from specified ports and write to specified datasets
    ---		|-> create dataset from specific value of port given in pvconf
