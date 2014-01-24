@@ -75,6 +75,13 @@ function creategroups(f,gs)
    return f
 end
 
+function getdatatypefromdatasettype(s)
+   if s == "int[1]" then
+      return hdf5.int
+   elseif s == "long[1]" then
+      return hdf5.long
+   end
+end
 --- For the given port, create a ubx_data to hold the result of a read.
 -- @param port
 -- @return ubx_data_t sample
@@ -173,7 +180,7 @@ function step(b)
    --- create group according to time
    local base_group
    if timestamp~=0 then
-      base_group = file:create_group(("%f, "):format(get_time()))
+      base_group = file:create_group(("%f"):format(get_time()))
    else
       -- TODO if no timestamp we need to create states? starting from 000000 ?
       base_group = file
@@ -190,10 +197,13 @@ function step(b)
          --print("DATA: "..ts(tot_conf[i].sample_cdata))
 	 -- TODO If our output of a port is a struct we need to disect this according to port_var
          --- create c data type 
-         local buf = ffi.new("int[1]") -- TODO Not hardcoded!
+         local buf = ffi.new(tot_conf[i].dataset_type)
 	 buf = tot_conf[i].sample_cdata
-         local space = hdf5.create_simple_space({1,1}) -- TODO Not hardcoded!
-         local datatype = hdf5.char -- TODO Not hardcoded!
+	 local datatype = getdatatypefromdatasettype(tot_conf[i].dataset_type)
+	 --print("size of buf: "..ts(ffi.sizeof(buf)))
+	 --print("size of datatype: "..ts(datatype:get_size()))
+	 local size = ffi.sizeof(buf)/datatype:get_size()
+         local space = hdf5.create_simple_space({1,size})
          local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
          dataset:write(buf, datatype)
       end
