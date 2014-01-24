@@ -1,46 +1,5 @@
 #!/usr/bin/luajit
 
---[[
-ffi = require("ffi")
-ubx = require "ubx"
-time = require("time")
-ubx_utils = require("ubx_utils")
-ts = tostring
-hdf5 = require "hdf5"
---array = require "array"
-
--- prog starts here.
-
---print(hdf5.get_libversion())
-
-function dosomething(x,y,z)
-  print ("X is "..x.." and y is "..y.." and z is "..z)
-end
-
-print("creating array")
-local buf = ffi.new("double[3]",10.01, 11.11, 12.21)
-
-print("creating file")
-local file = hdf5.create_file("Testfile1.h5")
-
-print("creating space")
-local space = hdf5.create_simple_space({1,3})
-
-print("creating group")
-local group = file:create_group("Testgroup1")
-
-print("creating dataset")
-local dataset = group:create_dataset("TestDataset1", hdf5.double, space)
-
-print("write data from buffer to dataset")
-dataset:write(buf,hdf5.double)
-
-print("closing file")
-file:flush_file()
-
---io.read()
-]]--
-
 local ubx=require("ubx")
 local ubx_utils = require("ubx_utils")
 local utils = require("utils")
@@ -56,14 +15,8 @@ filename=nil
 file=nil
 timestamp=nil
 base_group=nil
-group=nil
+--group=nil
 tot_conf=nil
-fd=nil
-
--- sample_conf={
---    { blockname='blockA', portname="port1", buff_len=10, },
---    { blockname='blockB', portname=true, buff_len=10 }, -- report all
---}
 
 -- sample_conf={
 --    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.x", dataset_name="x", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
@@ -73,6 +26,14 @@ fd=nil
 --    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.y", dataset_name="y", dataset_type="double", group_name="/State/Twist/RotationalVelocity/"},
 --    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.z", dataset_name="z", dataset_type="double", group_name="/State/Twist/RotationalVelocity/"},
 -- }
+
+--sample_conf2=[[
+--{
+   --{ blockname='random1', portname="rnd", buff_len=1, port_var="", dataset_name="randomNumber", dataset_type="integer", group_name="/Random/Random1/" },
+   --{ blockname='random1', portname="rnd", buff_len=1, port_var="", dataset_name="randomNumber2", dataset_type="integer", group_name="/Random/Random2/" }
+--}
+--]]
+
 
 local ts1=ffi.new("struct ubx_timespec")
 local ns_per_s = 1000000000
@@ -119,7 +80,6 @@ end
 --- For the given port, create a ubx_data to hold the result of a read.
 -- @param port
 -- @return ubx_data_t sample
--- TODO Usefull?
 function create_read_sample(p, ni)
    return ubx.data_alloc(ni, p.out_type_name, p.out_data_len)
 end
@@ -137,7 +97,6 @@ local function port_conf_to_conflist(c, this)
    for i,conf in ipairs(res) do
       local bname, pname, pvar, dsname, dstype, gname = ts(conf.blockname), ts(conf.portname), ts(conf.port_var), ts(conf.dataset_name), ts(conf.dataset_type), ts(conf.group_name)
       
-      --- TODO implement here!
       --- get block
       local b = ubx.block_get(ni, bname)
       if b==nil then
@@ -163,7 +122,6 @@ local function port_conf_to_conflist(c, this)
 	 ubx.conn_lfds_cyclic(b, pname, this, p_rep_name, conf.buff_len)
 
 	 conf.pname = p_rep_name
-	 -- TODO ubx_data_t argument is nil
 	 conf.sample=create_read_sample(p, ni)
 	 conf.sample_cdata = ubx.data_to_cdata(conf.sample)
 	 conf.serfun=cdata.gen_logfun(ubx.data_to_ctype(conf.sample), blockport)
@@ -183,7 +141,7 @@ function init(b)
    b=ffi.cast("ubx_block_t*", b)
    ubx.ffi_load_types(b.ni)
 
-   --- tot_conf
+   --- get conf
    local tot_conf_str = ubx.data_tolua(ubx.config_get_data(b, "report_conf"))
 
    if tot_conf_str == 0 then
@@ -193,10 +151,8 @@ function init(b)
 
    filename = ubx.data_tolua(ubx.config_get_data(b, "filename"))
    timestamp = ubx.data_tolua(ubx.config_get_data(b, "timestamp"))
-
-   -- print(('file_logger.init: reporting to file="%s", sep="%s", conf=%s'):format(filename, separator, rconf_str))
    print(('file_logger: reporting to file="%s"'):format(filename))
-
+   --- create tot_conf from string
    tot_conf = port_conf_to_conflist(tot_conf_str, b)
    return true
 end
@@ -204,21 +160,6 @@ end
 --- start: create new hdf5 file
 function start(b)
 
-   --[[
-   b=ffi.cast("ubx_block_t*", b)
-   ubx.ffi_load_types(b.ni)
-
-   if timestamp~=0 then
-      fd:write(("time, "):format(get_time()))
-   end
-
-   for i=1,#rconf do
-      rconf[i].serfun("header", fd)
-      if i<#rconf then fd:write(", ") end
-   end
-
-   fd:write("\n")
-   ]]--
    print("creating file")
    file = hdf5.create_file(filename)
    return true
@@ -226,45 +167,26 @@ end
 
 --- step: read ports and write values
 function step(b)
-   --[[
-   b=ffi.cast("ubx_block_t*", b)
 
-   if timestamp~=0 then
-      fd:write(("%f, "):format(get_time()))
-   end
-
-   for i=1,#rconf do
-      if ubx.port_read(rconf[i].pinv, rconf[i].sample) < 0 then
-	 print("file_logger error: failed to read "..rconf.blockname.."."..rconf.portname)
-      else
-	 rconf[i].serfun(rconf[i].sample_cdata, fd)
-	 if i<#rconf then fd:write(", ") end
-      end
-   end
-   fd:write("\n")
-   ]]--
    --- TODO get time (this will need to be specifiable from outside --> maybe separate block?)
-   --- TODO create group according to time
+   --- create group according to time
    if timestamp~=0 then
       base_group = file:create_group(("%f, "):format(get_time()))
    end
    
-   --- TODO create groups within group created according to time
-   --for i=1,#tot_conf.group_name do
+   --- create groups within group created according to time
    for i=1,#tot_conf do
-      print("creating groups: "..tot_conf[i].group_name)
-      group = creategroups(base_group, tot_conf[i].group_name)
-      -- TODO create dataset inside this group
+      --print("creating groups: "..tot_conf[i].group_name)
+      local group = creategroups(base_group, tot_conf[i].group_name)
+      -- create dataset inside this group
       if ubx.port_read(tot_conf[i].pinv, tot_conf[i].sample) < 0 then
          print("hdf5_logger error: failed to read"..tot_conf.blockname.."."..tot_conf.portname)
       else
-	 --tot_conf[i].serfun(tot_conf[i].sample_cdata, fd)
          print("DATA: "..ts(tot_conf[i].sample_cdata))
-         --print("DATA2: "..ts(tot_conf[i].sample))
-         --local buf = ffi.new("int[1]", tot_conf[i].sample_cdata)
-         local buf = ffi.new("int[1]")
+         --- create c data type 
+         local buf = ffi.new("int[1]") -- TODO Not hardcoded!
 	 buf = tot_conf[i].sample_cdata
-         local space = hdf5.create_simple_space({1,1})
+         local space = hdf5.create_simple_space({1,1}) -- TODO Not hardcoded!
          --local datatype = hdf5.double
          --local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
          local dataset = group:create_dataset(tot_conf[i].dataset_name, hdf5.char, space)
@@ -272,48 +194,15 @@ function step(b)
          dataset:write(buf, hdf5.char)
       end
    end
-   --- TODO get data from specified ports and write to specified datasets
-   ---		|-> create dataset from specific value of port given in pvconf
-   ---		|-> create buffer according to data 
-   ---		|-> create space according to data size
-   ---		|-> get data from port to buffer
-   ---		|-> write data from buffer to dataset
-
-   --- TODO Commented!
-   --[[
-   for i=1,#tot_conf.block_name do
-      local buf = ffi.new(tot_conf.dataset_type[i],||dataFromPort||)
-      local space = hdf5.create_simple_space({1,||sizeOfDataFromPort||}) --- will we have multiple dimension (3+) data?
-      group = group:open_group(tot_conf.group_name[i])
-      -- TODO link the dataset_type to a hdf5 set:
-      --       |-> switch with mapping from double to hdf5.double ...
-      local datatype = hdf5.double
-      local dataset = group:create_dataset(tot_conf.dataset_name[i], datatype, space)
-      dataset:write(buf,datatype)
-   end
-   ]]--
-      
-   --[[
-   for i=1,#pconf do
-      if ubx.port_read(pconf[i].pinv, pconf[i].sample) < 0 then
-         print("hdf5_logger error: failed to read "..pconf.blockname.."."..pconf.portname)
-      else
-         pconf[i].serfun(pconf[i].sample_cdata, fd)
-         if i<#pconf then fd:write(", ") end
-      end
-   end
-   ]]--
 end
 
 --- cleanup
 function cleanup(b)
-   --io.close(fd)
    print("closing file")
    file:flush_file()
-   fd=nil
    filename=nil
    file=nil
-   group=nil
+   --group=nil
    base_group=nil
    tot_conf=nil
 end
