@@ -257,16 +257,20 @@ function step(b)
       -- TODO create dataset inside this group
       if ubx.port_read(tot_conf[i].pinv, tot_conf[i].sample) < 0 then
          print("hdf5_logger error: failed to read"..tot_conf.blockname.."."..tot_conf.portname)
+      else
+	 --tot_conf[i].serfun(tot_conf[i].sample_cdata, fd)
+         print("DATA: "..ts(tot_conf[i].sample_cdata))
+         --print("DATA2: "..ts(tot_conf[i].sample))
+         --local buf = ffi.new("int[1]", tot_conf[i].sample_cdata)
+         local buf = ffi.new("int[1]")
+	 buf = tot_conf[i].sample_cdata
+         local space = hdf5.create_simple_space({1,1})
+         --local datatype = hdf5.double
+         --local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
+         local dataset = group:create_dataset(tot_conf[i].dataset_name, hdf5.char, space)
+         --dataset:write(buf, datatype)
+         dataset:write(buf, hdf5.char)
       end
-      --local buf = ffi.new(tot_conf[i].dataset_type, ubx.port_read(tot_conf[i].pinv, tot_conf[i].sample))
-      print("DATA: "..ts(ubx.port_read(tot_conf[i].pinv, tot_conf[i].sample)))
-      local buf = ffi.new("int[1]", ubx.port_read(tot_conf[i].pinv, tot_conf[i].sample))
-      local space = hdf5.create_simple_space({1,1})
-      --local datatype = hdf5.double
-      --local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
-      local dataset = group:create_dataset(tot_conf[i].dataset_name, hdf5.char, space)
-      --dataset:write(buf, datatype)
-      dataset:write(buf, hdf5.char)
    end
    --- TODO get data from specified ports and write to specified datasets
    ---		|-> create dataset from specific value of port given in pvconf
