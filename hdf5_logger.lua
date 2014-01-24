@@ -14,8 +14,6 @@ local hdf5 = require"hdf5"
 filename=nil
 file=nil
 timestamp=nil
-base_group=nil
---group=nil
 tot_conf=nil
 
 -- sample_conf={
@@ -114,6 +112,7 @@ local function port_conf_to_conflist(c, this)
 	 conf.buff_len=1
       end
       --- add port
+      -- TODO if port and block are the same we don't need to add it again?
       if p.out_type~=nil then --- if port out type is not nil
 	 local blockport = bname.."."..pname
 	 local p_rep_name=ts(i)
@@ -168,10 +167,16 @@ end
 --- step: read ports and write values
 function step(b)
 
-   --- TODO get time (this will need to be specifiable from outside --> maybe separate block?)
+   --- TODO get time 
+   ---     (this will need to be specifiable from outside --> maybe separate block?)
+   ---     at the moment this is ubx.clock_mono_gettime()
    --- create group according to time
+   local base_group
    if timestamp~=0 then
       base_group = file:create_group(("%f, "):format(get_time()))
+   else
+      -- TODO if no timestamp we need to create states? starting from 000000 ?
+      base_group = file
    end
    
    --- create groups within group created according to time
@@ -182,16 +187,15 @@ function step(b)
       if ubx.port_read(tot_conf[i].pinv, tot_conf[i].sample) < 0 then
          print("hdf5_logger error: failed to read"..tot_conf.blockname.."."..tot_conf.portname)
       else
-         print("DATA: "..ts(tot_conf[i].sample_cdata))
+         --print("DATA: "..ts(tot_conf[i].sample_cdata))
+	 -- TODO If our output of a port is a struct we need to disect this according to port_var
          --- create c data type 
          local buf = ffi.new("int[1]") -- TODO Not hardcoded!
 	 buf = tot_conf[i].sample_cdata
          local space = hdf5.create_simple_space({1,1}) -- TODO Not hardcoded!
-         --local datatype = hdf5.double
-         --local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
-         local dataset = group:create_dataset(tot_conf[i].dataset_name, hdf5.char, space)
-         --dataset:write(buf, datatype)
-         dataset:write(buf, hdf5.char)
+         local datatype = hdf5.char -- TODO Not hardcoded!
+         local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
+         dataset:write(buf, datatype)
       end
    end
 end
@@ -201,8 +205,7 @@ function cleanup(b)
    print("closing file")
    file:flush_file()
    filename=nil
+   timestamp=nil
    file=nil
-   --group=nil
-   base_group=nil
    tot_conf=nil
 end
