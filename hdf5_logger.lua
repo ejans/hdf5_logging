@@ -196,6 +196,11 @@ function step(b)
       else
          --print("DATA: "..ts(tot_conf[i].sample_cdata))
 	 -- TODO If our output of a port is a struct we need to disect this according to port_var
+	 --if tot_conf[i].port_var == nil then
+
+	 --else
+
+	 --end
          --- create c data type 
          local buf = ffi.new(tot_conf[i].dataset_type)
 	 buf = tot_conf[i].sample_cdata
