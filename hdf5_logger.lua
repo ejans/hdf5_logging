@@ -17,7 +17,7 @@ timestamp=nil
 tot_conf=nil
 
 -- sample_conf={
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.x", dataset_name="x", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
+--    { blockname='youbot1', portname="base_msr_twist", buff_len=1, data_type="kdl_twist", port_var="vel.x", dataset_name="x", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
 --    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.y", dataset_name="y", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
 --    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.z", dataset_name="z", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
 --    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.x", dataset_name="x", dataset_type="double", group_name="/State/Twist/RotationalVelocity/"},
@@ -80,6 +80,9 @@ function getdatatypefromdatasettype(s)
       return hdf5.int
    elseif s == "long[1]" then
       return hdf5.long
+   elseif s == "struct" then
+      --- TODO we have to create the sub data types inside the struct according to? 
+      return nil
    end
 end
 --- For the given port, create a ubx_data to hold the result of a read.
@@ -196,11 +199,26 @@ function step(b)
       else
          --print("DATA: "..ts(tot_conf[i].sample_cdata))
 	 -- TODO If our output of a port is a struct we need to disect this according to port_var
-	 --if tot_conf[i].port_var == nil then
+	 -- we can check if port_var is "" or we can check if datatype is struct?
+	 if tot_conf[i].port_var == "" then
+	 print("port_var is empty")
+	 --- create c data type
+         local buf = ffi.new(tot_conf[i].dataset_type)
+	 buf = tot_conf[i].sample_cdata
+	 local datatype = getdatatypefromdatasettype(tot_conf[i].dataset_type)
+	 --print("size of buf: "..ts(ffi.sizeof(buf)))
+	 --print("size of datatype: "..ts(datatype:get_size()))
+	 local size = ffi.sizeof(buf)/datatype:get_size()
+         local space = hdf5.create_simple_space({1,size})
+         local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
+         dataset:write(buf, datatype)
+	 else
+	 print("port_var is NOT empty")
+         --- TODO we have to create the sub data types inside the struct according to? 
 
-	 --else
-
-	 --end
+	 end
+	 --[[
+	 --- original
          --- create c data type 
          local buf = ffi.new(tot_conf[i].dataset_type)
 	 buf = tot_conf[i].sample_cdata
@@ -211,6 +229,7 @@ function step(b)
          local space = hdf5.create_simple_space({1,size})
          local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
          dataset:write(buf, datatype)
+	 ]]--
       end
    end
 end
