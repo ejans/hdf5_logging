@@ -45,7 +45,7 @@ logger_conf=[[
 
 logger_conf=[[
 {
-   { blockname='random1', portname="rnd", buff_len=1, port_var="", dataset_name="randomNumber", dataset_type="long[1]", group_name="/Random/Random1/" },
+   { blockname='random1', portname="rnd", buff_len=1, port_var="", dataset_name="randomNumber", dataset_type="int[1]", group_name="/Random/Random1/" },
    { blockname='random1', portname="rnd", buff_len=1, port_var="", dataset_name="randomNumber2", dataset_type="long[1]", group_name="/Random/Random2/" }
 }
 ]]
@@ -68,7 +68,8 @@ hdf5_log1=ubx.block_create(ni, "hdf5_logging/hdf5_logger", "hdf5_log1",
 print("creating instance of 'std_triggers/ptrig'")
 ptrig1=ubx.block_create(ni, "std_triggers/ptrig", "ptrig1",
 			{
-			   period = {sec=0, usec=100000 },
+			   --period = {sec=0, usec=100000 },
+			   period = {sec=2, usec=0 },
 			   sched_policy="SCHED_OTHER", sched_priority=0,
 			   trig_blocks={ { b=random1, num_steps=1, measure=0 },
 					 { b=hdf5_log1, num_steps=1, measure=0 }

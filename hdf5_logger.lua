@@ -207,63 +207,54 @@ function step(b)
          --print("DATA: "..ts(tot_conf[i].sample_cdata))
 	 -- TODO If our output of a port is a struct we need to disect this according to port_var
 	 -- we can check if port_var is "" or we can check if datatype is struct?
-	 if tot_conf[i].port_var == "" then
-	 print("port_var is empty")
-	 --- create c data type
+
+	 local datatype = getdatatypefromdatasettype(tot_conf[i].dataset_type)
          local buf = ffi.new(tot_conf[i].dataset_type)
+
+	 if tot_conf[i].port_var == "" then
+	 --print("port_var is empty")
+	 --- create c data type
+         --local buf = ffi.new(tot_conf[i].dataset_type)
 	 buf = tot_conf[i].sample_cdata
-	 local datatype = getdatatypefromdatasettype(tot_conf[i].dataset_type)
 	 --print("size of buf: "..ts(ffi.sizeof(buf)))
 	 --print("size of datatype: "..ts(datatype:get_size()))
-	 local size = ffi.sizeof(buf)/datatype:get_size()
-	 print("size: "..size)
-         local space = hdf5.create_simple_space({1,size})
-         local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
-         dataset:write(buf, datatype)
+	 --local size = ffi.sizeof(buf)/datatype:get_size()
+	 --print("size: "..size)
+         --local space = hdf5.create_simple_space({1,size})
+         --local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
+         --dataset:write(buf, datatype)
 	 else
-	 print("port_var is NOT empty")
-         --- TODO we have to create the sub data types inside the struct according to? 
-	 --local buf = ffi.new(tot_conf[i].dataset_type)
-	 -- TODO Duplicate code! put before if?
-	 local datatype = getdatatypefromdatasettype(tot_conf[i].dataset_type)
+	 --print("port_var is NOT empty")
 	 --print("size of buf: "..ts(ffi.sizeof(buf)))
 	 --print("size of datatype: "..ts(datatype:get_size()))
-	 --- buf will contain the raw struct!
+	 --- buf2 will contain the raw struct!
 	 local buf2 = tot_conf[i].sample_cdata
-	 --- TODO Debug
-	 --print(buf2)
-	 --print(buf2.vel)
-	 --print(buf2.vel.x)
-	 --- TODO TEST
+
+	 -- TODO HARDCODED!
 	 --buf = buf2.vel.x
+	 buf = ffi.new(tot_conf[i].dataset_type, buf2.vel.x)
 
-	 --buf = ffi.cast(buf2.vel.x, buf)
-         --buf = ubx.data_to_cdata(buf2.vel.x)
-	 --- TODO TEST
-	 --print(tot_conf[i].dataset_type)
-	 local buf = ffi.new(tot_conf[i].dataset_type, buf2.vel.x)
-	 local size = ffi.sizeof(buf)/datatype:get_size()
-	 print("size: "..size)
-         local space = hdf5.create_simple_space({1,size})
-	 print(space)
-         local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
+	 -- TODO DEBUG
+         print(tot_conf[i].port_var)
+	 print(buf2.vel.x)
 
-         dataset:write(buf, datatype)
+	 --local buf = ffi.new(tot_conf[i].dataset_type, buf2..tot_conf[i].port_var)
+	 --local size = ffi.sizeof(buf)/datatype:get_size()
+	 --print("size: "..size)
+         --local space = hdf5.create_simple_space({1,size})
+	 --print(space)
+         --local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
+
+         --dataset:write(buf, datatype)
 
 	 end
-	 --[[
-	 --- original
-         --- create c data type 
-         local buf = ffi.new(tot_conf[i].dataset_type)
-	 buf = tot_conf[i].sample_cdata
-	 local datatype = getdatatypefromdatasettype(tot_conf[i].dataset_type)
-	 --print("size of buf: "..ts(ffi.sizeof(buf)))
-	 --print("size of datatype: "..ts(datatype:get_size()))
+
 	 local size = ffi.sizeof(buf)/datatype:get_size()
+	 --print("size: "..size)
          local space = hdf5.create_simple_space({1,size})
          local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
          dataset:write(buf, datatype)
-	 ]]--
+
       end
    end
 end
