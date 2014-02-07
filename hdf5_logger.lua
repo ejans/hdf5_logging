@@ -230,13 +230,17 @@ function step(b)
 	 --- buf2 will contain the raw struct!
 	 local buf2 = tot_conf[i].sample_cdata
 
-	 -- TODO HARDCODED!
-	 --buf = buf2.vel.x
-	 buf = ffi.new(tot_conf[i].dataset_type, buf2.vel.x)
+	 local ok, fun = utils.eval_sandbox(utils.expand("return function (t) return t.$INDEX end", {INDEX=tot_conf[i].port_var}))
+	 print(ok)
+	 print(fun)
+	 print("===================")
+	 print(buf2.vel.x)
+	 print(fun(buf2))
+	 buf = ffi.new(tot_conf[i].dataset_type, fun(buf2))
 
 	 -- TODO DEBUG
-         print(tot_conf[i].port_var)
-	 print(buf2.vel.x)
+         --print(tot_conf[i].port_var)
+	 --print(buf2.vel.x)
 
 	 --local buf = ffi.new(tot_conf[i].dataset_type, buf2..tot_conf[i].port_var)
 	 --local size = ffi.sizeof(buf)/datatype:get_size()
