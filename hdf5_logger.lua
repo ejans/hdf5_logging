@@ -16,14 +16,17 @@ file=nil
 timestamp=nil
 tot_conf=nil
 
--- sample_conf={
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, data_type="kdl_twist", port_var="vel.x", dataset_name="x", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.y", dataset_name="y", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.z", dataset_name="z", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.x", dataset_name="x", dataset_type="double", group_name="/State/Twist/RotationalVelocity/"},
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.y", dataset_name="y", dataset_type="double", group_name="/State/Twist/RotationalVelocity/"},
---    { blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.z", dataset_name="z", dataset_type="double", group_name="/State/Twist/RotationalVelocity/"},
--- }
+--- configuration examples
+--sample_conf=[[
+--{
+   --{ blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.x", dataset_name="x", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
+   --{ blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.y", dataset_name="y", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
+   --{ blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="vel.z", dataset_name="z", dataset_type="double", group_name="/State/Twist/LinearVelocity/"},
+   --{ blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.x", dataset_name="x", dataset_type="double", group_name="/State/Twist/RotationalVelocity/"},
+   --{ blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.y", dataset_name="y", dataset_type="double", group_name="/State/Twist/RotationalVelocity/"},
+   --{ blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var="rot.z", dataset_name="z", dataset_type="double", group_name="/State/Twist/RotationalVelocity/"},
+--}
+--]]
 
 --sample_conf2=[[
 --{
@@ -31,7 +34,6 @@ tot_conf=nil
    --{ blockname='random1', portname="rnd", buff_len=1, port_var="", dataset_name="randomNumber2", dataset_type="integer", group_name="/Random/Random2/" }
 --}
 --]]
-
 
 local ts1=ffi.new("struct ubx_timespec")
 local ns_per_s = 1000000000
@@ -82,14 +84,9 @@ function getdatatypefromdatasettype(s)
       return hdf5.long
    elseif s == "double[1]" then
       return hdf5.double
-   --- we declare the most basic datatype which we are going to log. even if it's a part of a struct
-   --[[
-   elseif s == "struct" then
-      --- TODO we have to create the sub data types inside the struct according to? 
-      return nil
-   ]]--
    end
 end
+
 --- For the given port, create a ubx_data to hold the result of a read.
 -- @param port
 -- @return ubx_data_t sample
@@ -138,8 +135,19 @@ local function port_conf_to_conflist(c, this)
 
 	 conf.pname = p_rep_name
 	 conf.sample=create_read_sample(p, ni)
+	 -- TODO filter for structs here and make sample_cdata of wanted log data (see step)
+	 if conf.pvar == "" then
 	 conf.sample_cdata = ubx.data_to_cdata(conf.sample)
-	 conf.serfun=cdata.gen_logfun(ubx.data_to_ctype(conf.sample), blockport)
+	 else
+	 -- TODO TEST!
+	 local ok, fun = utils.eval_sandbox(utils.expand("return function (t) return t.$INDEX end", {INDEX=conf.pvar}))
+	 local fun2 = ubx.data_to_cdata(conf.sample)
+	 local fun3 = fun(fun2)
+	 --conf.sample_cdata = fun(ubx.data_to_cdata(conf.sample))
+	 conf.sample_cdata = fun3
+	 end
+	 --- unused?
+	 --conf.serfun=cdata.gen_logfun(ubx.data_to_ctype(conf.sample), blockport)
       else
 	 print("ERR: hdf5_logger: refusing to report in-port ", bname.."."..pname)
       end
@@ -205,60 +213,36 @@ function step(b)
          print("hdf5_logger error: failed to read"..tot_conf.blockname.."."..tot_conf.portname)
       else
          --print("DATA: "..ts(tot_conf[i].sample_cdata))
-	 -- TODO If our output of a port is a struct we need to disect this according to port_var
-	 -- we can check if port_var is "" or we can check if datatype is struct?
-
+         -- TODO put this buffer creation in init function and an array according to tot_conf ( inside tot_conf?)
+	 -- |-> tot_conf[i].buf is the right buffer, buf will be used as???
 	 local datatype = getdatatypefromdatasettype(tot_conf[i].dataset_type)
          local buf = ffi.new(tot_conf[i].dataset_type)
 
+	 --[[
 	 if tot_conf[i].port_var == "" then
 	 --print("port_var is empty")
 	 --- create c data type
-         --local buf = ffi.new(tot_conf[i].dataset_type)
 	 buf = tot_conf[i].sample_cdata
-	 --print("size of buf: "..ts(ffi.sizeof(buf)))
-	 --print("size of datatype: "..ts(datatype:get_size()))
-	 --local size = ffi.sizeof(buf)/datatype:get_size()
-	 --print("size: "..size)
-         --local space = hdf5.create_simple_space({1,size})
-         --local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
-         --dataset:write(buf, datatype)
 	 else
 	 --print("port_var is NOT empty")
-	 --print("size of buf: "..ts(ffi.sizeof(buf)))
-	 --print("size of datatype: "..ts(datatype:get_size()))
 	 --- buf2 will contain the raw struct!
+	 -- TODO trim this sample_cdata to the specific needed variable in init function so we can 
+	 -- use the same function here and do the trimming of the struct in init
 	 local buf2 = tot_conf[i].sample_cdata
-
 	 local ok, fun = utils.eval_sandbox(utils.expand("return function (t) return t.$INDEX end", {INDEX=tot_conf[i].port_var}))
-	 print(ok)
-	 print(fun)
-	 print("===================")
-	 print(buf2.vel.x)
-	 print(fun(buf2))
 	 buf = ffi.new(tot_conf[i].dataset_type, fun(buf2))
-
-	 -- TODO DEBUG
-         --print(tot_conf[i].port_var)
-	 --print(buf2.vel.x)
-
-	 --local buf = ffi.new(tot_conf[i].dataset_type, buf2..tot_conf[i].port_var)
-	 --local size = ffi.sizeof(buf)/datatype:get_size()
-	 --print("size: "..size)
-         --local space = hdf5.create_simple_space({1,size})
-	 --print(space)
-         --local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
-
-         --dataset:write(buf, datatype)
-
 	 end
+	 ]]--
+
+	 -- TODO TEST!
+	 buf = tot_conf[i].sample_cdata
 
 	 local size = ffi.sizeof(buf)/datatype:get_size()
 	 --print("size: "..size)
+	 -- TODO more than 1 dimension?
          local space = hdf5.create_simple_space({1,size})
          local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
          dataset:write(buf, datatype)
-
       end
    end
 end
