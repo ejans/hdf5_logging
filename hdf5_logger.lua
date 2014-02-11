@@ -135,16 +135,17 @@ local function port_conf_to_conflist(c, this)
 
 	 conf.pname = p_rep_name
 	 conf.sample=create_read_sample(p, ni)
-	 -- TODO filter for structs here and make sample_cdata of wanted log data (see step)
-	 if conf.pvar == "" then
+	 --- if conf.pvar is empty create simple cdata, else get cdata from struct by port_var
+	 --if conf.pvar == "" then
+	 if conf.port_var == "" then
 	 conf.sample_cdata = ubx.data_to_cdata(conf.sample)
 	 else
-	 -- TODO TEST!
-	 local ok, fun = utils.eval_sandbox(utils.expand("return function (t) return t.$INDEX end", {INDEX=conf.pvar}))
-	 local fun2 = ubx.data_to_cdata(conf.sample)
-	 local fun3 = fun(fun2)
-	 --conf.sample_cdata = fun(ubx.data_to_cdata(conf.sample))
-	 conf.sample_cdata = fun3
+	 local ok, fun = utils.eval_sandbox(utils.expand("return function (t) return t.$INDEX end", {INDEX=conf.port_var}))
+	 -- TODO The problem is the ubx.data_to_cdata function is not linked anymore to the conf.sample_cdata function so
+	 -- we will get no new data but the initial value when this int runs (0) this is the reason for no data in our 
+	 -- hdf5 file.
+	 conf.sample_cdata = ubx.data_to_cdata(conf.sample)
+	 conf.trim_struct = fun
 	 end
 	 --- unused?
 	 --conf.serfun=cdata.gen_logfun(ubx.data_to_ctype(conf.sample), blockport)
@@ -213,31 +214,17 @@ function step(b)
          print("hdf5_logger error: failed to read"..tot_conf.blockname.."."..tot_conf.portname)
       else
          --print("DATA: "..ts(tot_conf[i].sample_cdata))
-         -- TODO put this buffer creation in init function and an array according to tot_conf ( inside tot_conf?)
-	 -- |-> tot_conf[i].buf is the right buffer, buf will be used as???
 	 local datatype = getdatatypefromdatasettype(tot_conf[i].dataset_type)
          local buf = ffi.new(tot_conf[i].dataset_type)
 
-	 --[[
+         --- if it's a struct inside the buf we need to trim it with trim_struct
 	 if tot_conf[i].port_var == "" then
-	 --print("port_var is empty")
-	 --- create c data type
-	 buf = tot_conf[i].sample_cdata
+	    buf = tot_conf[i].sample_cdata
 	 else
-	 --print("port_var is NOT empty")
-	 --- buf2 will contain the raw struct!
-	 -- TODO trim this sample_cdata to the specific needed variable in init function so we can 
-	 -- use the same function here and do the trimming of the struct in init
-	 local buf2 = tot_conf[i].sample_cdata
-	 local ok, fun = utils.eval_sandbox(utils.expand("return function (t) return t.$INDEX end", {INDEX=tot_conf[i].port_var}))
-	 buf = ffi.new(tot_conf[i].dataset_type, fun(buf2))
+	    buf = ffi.new(tot_conf[i].dataset_type, tot_conf[i].trim_struct(tot_conf[i].sample_cdata))
 	 end
-	 ]]--
-
-	 -- TODO TEST!
-	 buf = tot_conf[i].sample_cdata
-
 	 local size = ffi.sizeof(buf)/datatype:get_size()
+
 	 --print("size: "..size)
 	 -- TODO more than 1 dimension?
          local space = hdf5.create_simple_space({1,size})
