@@ -35,6 +35,12 @@ tot_conf=nil
 --}
 --]]
 
+--sample_conf3(TODO)=[[
+--{
+   --{ blockname='youbot1', portname="base_msr_twist", buff_len=1, port_var={"vel.x", "vel.y", "vel.z", "rot.x", "rot.y", "rot.z"}, dataset_name={"x", "y", "z", "x", "y", "z"}, group_name={"/State/Twist/LinearVelocity/", "/State/Twist/LinearVelocity/", "/State/Twist/LinearVelocity/", "/State/Twist/RotationalVelocity", "/State/Twist/RotationalVelocity", "/State/Twist/RotationalVelocity"}},
+--}
+--]]
+
 local ts1=ffi.new("struct ubx_timespec")
 local ns_per_s = 1000000000
 
@@ -126,6 +132,7 @@ local function port_conf_to_conflist(c, this)
       --- add port
       -- TODO if port and block are the same we don't need to add it again?
       -- |-> so check for availability of combination of port and block?
+      -- This will be fixed if we define in config multiple data for each port
       if p.out_type~=nil then --- if port out type is not nil
 	 local blockport = bname.."."..pname
 	 local p_rep_name=ts(i)
@@ -141,9 +148,6 @@ local function port_conf_to_conflist(c, this)
 	 conf.sample_cdata = ubx.data_to_cdata(conf.sample)
 	 else
 	 local ok, fun = utils.eval_sandbox(utils.expand("return function (t) return t.$INDEX end", {INDEX=conf.port_var}))
-	 -- TODO The problem is the ubx.data_to_cdata function is not linked anymore to the conf.sample_cdata function so
-	 -- we will get no new data but the initial value when this int runs (0) this is the reason for no data in our 
-	 -- hdf5 file.
 	 conf.sample_cdata = ubx.data_to_cdata(conf.sample)
 	 conf.trim_struct = fun
 	 end
@@ -221,10 +225,10 @@ function step(b)
 	 if tot_conf[i].port_var == "" then
 	    buf = tot_conf[i].sample_cdata
 	 else
+	    -- TODO if we need multiple parts of the struct a for loop according to port_var is needed here
 	    buf = ffi.new(tot_conf[i].dataset_type, tot_conf[i].trim_struct(tot_conf[i].sample_cdata))
 	 end
 	 local size = ffi.sizeof(buf)/datatype:get_size()
-
 	 --print("size: "..size)
 	 -- TODO more than 1 dimension?
          local space = hdf5.create_simple_space({1,size})
