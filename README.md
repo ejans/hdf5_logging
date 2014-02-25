@@ -1,20 +1,34 @@
 Description
 ===========
 
-a block to log to an hdf5 file
-
-Requirements
-============
-
-[HDF5 for lua](http://colberg.org/lua-hdf5/)
+A block to log to an hdf5 file
 
 Instructions
 ============
 
-See the [wiki]
+See the [wiki].
 
-To do
-=====
+Overview
+========
+
+Requires [HDF5 for lua](http://colberg.org/lua-hdf5)
+
+License
+=======
+
+This software is published under a dual-license: GNU Lesser General Public License LGPL 2.1 and BSD license. The dual-license implies that users of this code may choose which terms they prefer.
+
+Acknowledgment
+==============
+
+The research leading to these results has received funding from the
+European Community's Seventh Framework Programme under grant
+agreement no. FP7-600958 (SHERPA: Smart collaboration between Humans and
+ground-aErial Robots for imProving rescuing activities in Alpine
+environments)
+
+Task List
+=========
 
 - port capable of sending hdf5 file to another block (hdf5\_sender)
 	- use of struct with int leng and char[leng]?
