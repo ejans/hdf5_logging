@@ -30,6 +30,7 @@ environments)
 Task List
 =========
 
+- cleanup c errors by knowing what groups have already been created
 - port capable of sending hdf5 file to another block (hdf5\_sender)
 	- use of struct with int leng and char[leng]?
 	- use of type {class=...,name=hdf5_file}?

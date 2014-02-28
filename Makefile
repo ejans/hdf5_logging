@@ -1,19 +1,25 @@
 ROOT_DIR=$(CURDIR)/../..
 include $(ROOT_DIR)/make.conf
 INCLUDE_DIR=$(ROOT_DIR)/src/
+NAME=hdf5_logger
+DIRNAME=hdf5_logging
 
 TYPES:=$(wildcard types/*.h)
 HEXARRS:=$(TYPES:%=%.hexarr)
-HEXARRS += hdf5_logger.lua.hexarr
+HEXARRS += $(NAME).lua.hexarr
 
-hdf5_logger.so: hdf5_logger.o $(INCLUDE_DIR)/libubx.so
-	${CC} $(CFLAGS_SHARED) -o hdf5_logger.so hdf5_logger.o $(INCLUDE_DIR)/libubx.so -lluajit-5.1  -lpthread
+$(NAME).so: $(NAME).o $(INCLUDE_DIR)/libubx.so
+		${CC} $(CFLAGS_SHARED) -o $(NAME).so $(NAME).o $(INCLUDE_DIR)/libubx.so -lluajit-5.1  -lpthread
 
-hdf5_logger.lua.hexarr: hdf5_logger.lua
-	../../tools/file2carr.lua hdf5_logger.lua
+$(NAME).lua.hexarr: $(NAME).lua
+		../../tools/file2carr.lua $(NAME).lua
 
-hdf5_logger.o: hdf5_logger.c $(INCLUDE_DIR)/ubx.h $(INCLUDE_DIR)/ubx_types.h $(INCLUDE_DIR)/ubx.c $(HEXARRS)
-	${CC} -fPIC -I$(INCLUDE_DIR) -c $(CFLAGS) hdf5_logger.c
+$(NAME).o: $(NAME).c $(INCLUDE_DIR)/ubx.h $(INCLUDE_DIR)/ubx_types.h $(INCLUDE_DIR)/ubx.c $(HEXARRS)
+		${CC} -fPIC -I$(INCLUDE_DIR) -c $(CFLAGS) $(NAME).c
+
+$(NAME).c: ../logging/file_logger.c
+		echo "$$(cat ../../src/ubx.c | sed -n 1,31p)\n" | cat - ../logging/file_logger.c | sed -e 's/file_logger/$(NAME)/g' -e 's/logging/$(DIRNAME)/g' -e 's/writes to a/writes to a $(NAME)/' > $@
 
 clean:
-	rm -f *.o *.so *~ core $(HEXARRS)
+		rm -f *.o *.so *.c *~ core $(HEXARRS)
+
