@@ -1,14 +1,19 @@
-#!/usr/bin/luajit
+--
+-- Microblx generic logger
+--
+-- SPDX-License-Identifier: BSD-3-Clause
+--
 
 local ubx=require("ubx")
-local ubx_utils = require("ubx_utils")
 local utils = require("utils")
 local cdata = require("cdata")
 local ffi = require("ffi")
 local time = require("time")
 local ts = tostring
-local strict = require"strict"
 local hdf5 = require"hdf5"
+
+-- color handling via ubx
+red=ubx.red; blue=ubx.blue; cyan=ubx.cyan; white=ubx.cyan; green=ubx.green; yellow=ubx.yellow; magenta=ubx.magenta
 
 -- global state
 filename=nil
@@ -104,57 +109,85 @@ end
 -- @param conf str
 -- @param ni node_info
 -- @return tot_conf table
-local function port_conf_to_conflist(c, this)
+local function port_conf_to_conflist(rc, this)
    local ni = this.ni
    
-   local succ, res = utils.eval_sandbox("return "..c)
-   if not succ then error("hdf5_logger: failed to load report_conf:\n"..res) end
+   local succ, res = utils.eval_sandbox("return "..rc)
+   if not succ then error(red("hdf5_logger: failed to load report_conf:\n"..res, true)) end
 
    for i,conf in ipairs(res) do
-      local bname, pname, pvar, dsname, dstype, gname = ts(conf.blockname), ts(conf.portname), ts(conf.port_var), ts(conf.dataset_name), ts(conf.dataset_type), ts(conf.group_name)
-      
-      --- get block
-      local b = ubx.block_get(ni, bname)
-      if b==nil then
-         print("hdf5_logger error: no block "..bname.." found")
-	 return false
-      end
-      --- get port
-      local p = ubx.port_get(b, pname)
-      if p==nil then
-	 print("hdf5_logger error: block "..bname.." has no port "..pname)
-	 return false
-      end
-      --- set buffer length if not specified
-      if conf.buff_len==nil or conf.buff_len <=0 then
-	 conf.buff_len=1
-      end
-      --- add port
-      -- TODO if port and block are the same we don't need to add it again?
-      -- |-> so check for availability of combination of port and block?
-      -- This will be fixed if we define in config multiple data for each port
-      if p.out_type~=nil then --- if port out type is not nil
-	 local blockport = bname.."."..pname
-	 local p_rep_name=ts(i)
-	 print("hdf5_logger: reporting "..blockport.." as "..p_rep_name)
-	 ubx.port_add(this, p_rep_name, nil, p.out_type_name, p.out_data_len, nil, 0, 0)
-	 ubx.conn_lfds_cyclic(b, pname, this, p_rep_name, conf.buff_len)
+      local bname, pname = conf.blockname, conf.portname
 
-	 conf.pname = p_rep_name
-	 conf.sample=create_read_sample(p, ni)
-	 --- if conf.pvar is empty create simple cdata, else get cdata from struct by port_var
-	 --if conf.pvar == "" then
-	 if conf.port_var == "" then
-	 conf.sample_cdata = ubx.data_to_cdata(conf.sample)
-	 else
-	 local ok, fun = utils.eval_sandbox(utils.expand("return function (t) return t.$INDEX end", {INDEX=conf.port_var}))
-	 conf.sample_cdata = ubx.data_to_cdata(conf.sample)
-	 conf.trim_struct = fun
-	 end
-	 --- unused?
-	 --conf.serfun=cdata.gen_logfun(ubx.data_to_ctype(conf.sample), blockport)
-      else
-	 print("ERR: hdf5_logger: refusing to report in-port ", bname.."."..pname)
+      local b = ni:b(bname)
+
+      if b==nil then
+	 print(red("hdf5_logger error: no block ",true)..green(bname, true)..red(" found", true))
+	 return false
+      end
+
+      -- TODO Change to this implementation (copy from logger)
+      -- are we directly connecting to an iblock??
+      if pname==nil and ubx.is_iblock(b) then
+	 print("file_logger: reporting iblock ".. ubx.safe_tostr(b.name))
+	 local p_rep_name='r'..ts(i)
+	 local type_name = ubx.data_tolua(ubx.config_get_data(b, "type_name"))
+	 local data_len = ubx.data_tolua(ubx.config_get_data(b, "data_len"))
+
+	 ubx.port_add(this, p_rep_name, "reporting iblock "..bname, type_name, data_len, nil, 0, 0)
+	 local p = ubx.port_get(this, p_rep_name)
+	 ubx.port_connect_in(p, b)
+
+	 conf.type = 'iblock'
+	 conf.bname = bname
+	 conf.pname = pname
+	 conf.p_rep_name = p_rep_name
+	 conf.sample = ubx.data_alloc(ni, p.in_type_name, p.in_data_len)
+	 conf.sample_cdata = ubx.data_to_cdata(conf.sample, true)
+	 conf.serfun=cdata.gen_logfun(ubx.data_to_ctype(conf.sample, true), bname)
+
+      else -- normal connection to cblock
+         --- get port
+         local p = ubx.port_get(b, pname)
+         if p==nil then
+            print(red("hdf5_logger error: block ", true)..green(bname, true)..red(" has no port ", true)..cyan(pname, true))
+	    return false
+         end
+         --- set buffer length if not specified
+         if conf.buff_len==nil or conf.buff_len <=0 then conf.buff_len=1 end
+         --- add port
+         -- TODO if port and block are the same we don't need to add it again?
+         -- |-> so check for availability of combination of port and block?
+         -- This will be fixed if we define in config multiple data for each port
+         if p.out_type~=nil then --- if port out type is not nil
+	    local blockport = bname.."."..pname
+	    --local p_rep_name=ts(i)
+	    local p_rep_name='r'..ts(i)
+            local iblock
+	    print("hdf5_logger: reporting "..blockport.." as "..p_rep_name)
+	    --ubx.port_add(this, p_rep_name, nil, p.out_type_name, p.out_data_len, nil, 0, 0)
+	    ubx.port_add(this, p_rep_name, "reporting "..blockport, p.out_type_name, p.out_data_len, nil, 0, 0)
+	    iblock = ubx.conn_lfds_cyclic(b, pname, this, p_rep_name, conf.buff_len)
+
+	    conf.type = 'port'
+	    conf.iblock_name = iblock:get_name()
+	    conf.bname = bname
+	    conf.pname = p_rep_name
+	    conf.p_rep_name = p_rep_name
+	    conf.sample=create_read_sample(p, ni)
+	    --- if conf.pvar is empty create simple cdata, else get cdata from struct by port_var
+	    ----if conf.pvar == "" then
+	    if conf.port_var == "" then
+	    conf.sample_cdata = ubx.data_to_cdata(conf.sample)
+	    else
+	    local ok, fun = utils.eval_sandbox(utils.expand("return function (t) return t.$INDEX end", {INDEX=conf.port_var}))
+	    conf.sample_cdata = ubx.data_to_cdata(conf.sample)
+	    conf.trim_struct = fun
+	    end
+	    --- unused?
+	    --conf.serfun=cdata.gen_logfun(ubx.data_to_ctype(conf.sample), blockport)
+         else
+            print(red("ERR: hdf5_logger: refusing to report in-port ", bname.."."..pname), true)
+         end
       end
    end
 
@@ -240,6 +273,24 @@ end
 
 --- cleanup
 function cleanup(b)
+   b=ffi.cast("ubx_block_t*", b)
+   local ni = b.ni
+
+   -- cleanup connections and remove ports
+   for i,c in ipairs(tot_conf) do
+      if c.type == 'iblock' then
+	 ubx.port_disconnect_in(b:p(c.p_rep_name), ni:b(c.bname))
+	 b:port_rm(c.p_rep_name)
+      else
+	 -- disconnect reporting iblock from reported port:
+	 ubx.port_disconnect_out(ni:b(c.bname):p(c.pname), ni:b(c.iblock_name))
+	 -- disconnect local port from iblock and remove it
+	 ubx.port_disconnect_in(b:p(c.p_rep_name), ni:b(c.iblock_name))
+	 b:port_rm(c.p_rep_name)
+	 -- unload iblock
+	 ni:block_unload(c.iblock_name)
+      end
+   end
    print("closing file")
    file:flush_file()
    filename=nil

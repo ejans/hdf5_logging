@@ -1,7 +1,8 @@
 Description
 ===========
 
-A block to log to an hdf5 file
+A block to log to an hdf5 file.
+This version is to be used with the dev branch of microblx
 
 Instructions
 ============

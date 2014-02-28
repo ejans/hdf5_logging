@@ -29,7 +29,8 @@ print("creating instance of 'hexdump/hexdump'")
 hexdump1=ubx.block_create(ni, "hexdump/hexdump", "hexdump1")
 
 print("creating instance of 'lfds_buffers/cyclic'")
-fifo1=ubx.block_create(ni, "lfds_buffers/cyclic", "fifo1", {element_num=4, element_size=4})
+--fifo1=ubx.block_create(ni, "lfds_buffers/cyclic", "fifo1", {element_num=4, element_size=4})
+fifo1=ubx.block_create(ni, "lfds_buffers/cyclic", "fifo1", {buffer_len=4, type_name="unsigned int"})
 
 print("creating instance of 'hdf5_logging/hdf5_logger'")
 
