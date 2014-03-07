@@ -18,7 +18,7 @@ $(NAME).o: $(NAME).c $(INCLUDE_DIR)/ubx.h $(INCLUDE_DIR)/ubx_types.h $(INCLUDE_D
 		${CC} -fPIC -I$(INCLUDE_DIR) -c $(CFLAGS) $(NAME).c
 
 $(NAME).c: ../logging/file_logger.c
-		echo "$$(cat ../../src/ubx.c | sed -n 1,31p)\n" | cat - ../logging/file_logger.c | sed -e 's/file_logger/$(NAME)/g' -e 's/logging/$(DIRNAME)/g' -e 's/writes to a/writes to a $(NAME)/' -e 's/BSD-3-Clause/& LGPL-2.1+/' > $@
+		echo "$$(cat ../../src/ubx.c | sed -n 1,31p)\n" | cat - ../logging/file_logger.c | sed -e 's/file_logger/$(NAME)/g' -e 's/logging/$(DIRNAME)/g' -e 's/writes to a/& $(NAME)/' -e 's/BSD-3-Clause/& LGPL-2.1+/' > $@
 
 clean:
 		rm -f *.o *.so *.c *~ core $(HEXARRS)

@@ -28,12 +28,6 @@ random_kdl1=ubx.block_create(ni, "random_kdl/random_kdl", "random_kdl1", {min_ma
 
 print("creating instance of 'hdf5_logging/hdf5_logger'")
 
---logger_conf=[[
---{
-    --{ blockname='random_kdl1', portname="base_msr_twist", buff_len=1, data_type="kdl_twist", port_var="vel.x", dataset_name="x", dataset_type="double[1]", group_name="/State/Twist/LinearVelocity/"}
---}
---]]
-
 logger_conf=[[
 {
     { blockname='random_kdl1', portname="base_msr_twist", buff_len=1, port_var="vel.x", dataset_name="x", dataset_type="double[1]", group_name="/State/Twist/LinearVelocity/"}
@@ -103,5 +97,3 @@ end
 io.read()
 
 node_cleanup(ni)
-
-

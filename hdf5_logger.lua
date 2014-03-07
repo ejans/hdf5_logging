@@ -128,7 +128,7 @@ local function port_conf_to_conflist(rc, this)
       -- TODO Change to this implementation (copy from logger)
       -- are we directly connecting to an iblock??
       if pname==nil and ubx.is_iblock(b) then
-	 print("file_logger: reporting iblock ".. ubx.safe_tostr(b.name))
+	 print("hdf5_logger: reporting iblock ".. ubx.safe_tostr(b.name))
 	 local p_rep_name='r'..ts(i)
 	 local type_name = ubx.data_tolua(ubx.config_get_data(b, "type_name"))
 	 local data_len = ubx.data_tolua(ubx.config_get_data(b, "data_len"))
@@ -145,7 +145,8 @@ local function port_conf_to_conflist(rc, this)
 	 conf.sample_cdata = ubx.data_to_cdata(conf.sample, true)
 	 conf.serfun=cdata.gen_logfun(ubx.data_to_ctype(conf.sample, true), bname)
 
-      else -- normal connection to cblock
+      else 
+	 --- normal connection to cblock
          --- get port
          local p = ubx.port_get(b, pname)
          if p==nil then
