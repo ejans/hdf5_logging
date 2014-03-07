@@ -1,7 +1,7 @@
 --
--- Microblx generic logger
+-- Microblx hdf5 logger
 --
--- SPDX-License-Identifier: BSD-3-Clause
+-- SPDX-License-Identifier: BSD-3-Clause LGPL-2.1+
 --
 
 local ubx=require("ubx")
