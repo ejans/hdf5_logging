@@ -21,6 +21,10 @@ file=nil
 timestamp=nil
 tot_conf=nil
 
+ffi.cdef[[
+typedef struct {void* file; char* filename;} hdf5_logger_data;
+]]
+
 --- configuration examples
 --sample_conf=[[
 --{
@@ -267,7 +271,20 @@ function step(b)
 	 -- TODO more than 1 dimension?
          local space = hdf5.create_simple_space({1,size})
          local dataset = group:create_dataset(tot_conf[i].dataset_name, datatype, space)
-         dataset:write(buf, datatype)
+         --dataset:write(buf, datatype)
+
+	 --- TODO Test
+	 --[[
+	 local data = ffi.new("struct* hdf5_logging_data")
+	 data.file = dataset:get_file()
+	 ]]--
+
+	 local data = ffi.new("hdf5_logger_data")
+	 data.file = dataset:get_file()
+	 local dataname = "data"
+	 local datp = ubx.port_get(b, dataname)
+	 --ubx.port_write(datp, data)
+	 ubx.port_write(datp, hdf5_logger_data_t)
       end
    end
 end

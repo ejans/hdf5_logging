@@ -13,7 +13,8 @@ ubx.load_module(ni, "std_blocks/hexdump/hexdump.so")
 ubx.load_module(ni, "std_blocks/lfds_buffers/lfds_cyclic.so")
 ubx.load_module(ni, "std_blocks/webif/webif.so")
 --ubx.load_module(ni, "std_blocks/logging/file_logger.so")
-ubx.load_module(ni, "std_blocks/hdf5_logging/hdf5_logger.so")
+ubx.load_module(ni, "std_blocks/hdf5_logging/converter.so")
+ubx.load_module(ni, "std_blocks/hdf5_logging/saver.so")
 ubx.load_module(ni, "std_blocks/ptrig/ptrig.so")
 
 ubx.ffi_load_types(ni)
@@ -30,8 +31,9 @@ hexdump1=ubx.block_create(ni, "hexdump/hexdump", "hexdump1")
 print("creating instance of 'lfds_buffers/cyclic'")
 --fifo1=ubx.block_create(ni, "lfds_buffers/cyclic", "fifo1", {element_num=4, element_size=4})
 fifo1=ubx.block_create(ni, "lfds_buffers/cyclic", "fifo1", {buffer_len=4, type_name="unsigned int"})
+fifo2=ubx.block_create(ni, "lfds_buffers/cyclic", "fifo2", {buffer_len=1, type_name="struct hdf5_logging_data"})
 
-print("creating instance of 'hdf5_logging/hdf5_logger'")
+print("creating instance of 'hdf5_logging/converter'")
 
 --[[
 logger_conf=[[
@@ -60,10 +62,14 @@ logger_conf=[[
 -- }
 
 
-hdf5_log1=ubx.block_create(ni, "hdf5_logging/hdf5_logger", "hdf5_log1",
+converter1=ubx.block_create(ni, "hdf5_logging/converter", "converter1",
 			   {filename=os.date("%Y%m%d_%H%M%S")..'_report.h5',
 			    timestamp=1,
 			    report_conf=logger_conf})
+
+print("creating instance of 'hdf5_logging/saver'")
+saver1=ubx.block_create(ni, "hdf5_logging/saver", "saver1",
+			{filename=os.date("%Y%m%d_%H%M%S")..'_report.h5'})
 
 print("creating instance of 'std_triggers/ptrig'")
 ptrig1=ubx.block_create(ni, "std_triggers/ptrig", "ptrig1",
@@ -72,7 +78,7 @@ ptrig1=ubx.block_create(ni, "std_triggers/ptrig", "ptrig1",
 			   period = {sec=2, usec=0 },
 			   sched_policy="SCHED_OTHER", sched_priority=0,
 			   trig_blocks={ { b=random1, num_steps=1, measure=0 },
-					 { b=hdf5_log1, num_steps=1, measure=0 }
+					 { b=converter1, num_steps=1, measure=0 }
 			   } } )
 
 -- ubx.ni_stat(ni)
@@ -82,19 +88,27 @@ print("running ptrig1 init", ubx.block_init(ptrig1))
 print("running random1 init", ubx.block_init(random1))
 print("running hexdump1 init", ubx.block_init(hexdump1))
 print("running fifo1 init", ubx.block_init(fifo1))
-print("running hdf5_log1 init", ubx.block_init(hdf5_log1))
+print("running converter1 init", ubx.block_init(converter1))
+print("running saver1 init", ubx.block_init(saver1))
 
 print("running webif start", ubx.block_start(webif1))
 
 rand_port=ubx.port_get(random1, "rnd")
+converter_port=ubx.port_get(converter1, "data")
+saver_port=ubx.port_get(saver1, "data")
 
 ubx.port_connect_out(rand_port, hexdump1)
 ubx.port_connect_out(rand_port, fifo1)
 
+ubx.port_connect_out(converter_port, fifo2)
+ubx.port_connect_in(saver_port, fifo2)
+
 ubx.block_start(fifo1)
+ubx.block_start(fifo2)
 ubx.block_start(random1)
 ubx.block_start(hexdump1)
-ubx.block_start(hdf5_log1)
+ubx.block_start(converter1)
+ubx.block_start(saver1)
 
 --print(utils.tab2str(ubx.block_totab(random1)))
 print("--- demo app launched, browse to http://localhost:8888 and start ptrig1 block to start up")
@@ -106,7 +120,8 @@ print("running webif1 unload", ubx.block_unload(ni, "webif1"))
 print("running random1 unload", ubx.block_unload(ni, "random1"))
 print("running fifo1 unload", ubx.block_unload(ni, "fifo1"))
 print("running hexdump unload", ubx.block_unload(ni, "hexdump1"))
-print("running hdf5_log1 unload", ubx.block_unload(ni, "hdf5_log1"))
+print("running converter1 unload", ubx.block_unload(ni, "converter1"))
+print("running saver1 unload", ubx.block_unload(ni, "saver1"))
 
 -- ubx.ni_stat(ni)
 -- l1=ubx.ubx_alloc_data(ni, "unsigned long", 1)
