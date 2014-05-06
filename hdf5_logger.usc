@@ -9,6 +9,8 @@ local hdf5 = require "hdf5"
 
 -- global state
 tot_conf=nil
+filename=nil
+timestamp=nil
 
 report_conf= [===[
 {
@@ -16,6 +18,9 @@ report_conf= [===[
    { blockname='random1', portname="rnd", buff_len=1, port_var="", dataset_name="randomNumber2", dataset_type="long[1]", group_name="/Random/Random2/" },
 }
 ]===]
+
+filename="testfilename.h5"
+timestamp=1
 
 local ts1=ffi.new("struct ubx_timespec")
 local ns_per_s = 1000000000
@@ -78,7 +83,7 @@ end
 --- convert the conf string to a table (save in global states and add ports).
 -- @param conf str
 -- @param ni node_info
--- @return conf.list table
+-- @return tot_conf
 local function port_conf_to_conflist(rc, this)
    local ni = this.ni
    local succ, res = utils.eval_sandbox("return "..rc)
@@ -91,7 +96,6 @@ local function port_conf_to_conflist(rc, this)
          return false
       end
 
-      --local conf2 = {}
       -- TODO Change to this implementation (copy from logger)
       -- are we directly connecting to an iblock??
       if pname==nil and ubx.is_iblock(b) then
@@ -169,7 +173,7 @@ function init(b)
    ubx.ffi_load_types(b.ni)
 
    --- TODO TEST
-   print(report_conf)
+   --print(report_conf)
 
    --- get conf
    --local tot_conf_str = ubx.data_tolua(ubx.config_get_data(b, "report_conf"))
@@ -180,20 +184,20 @@ function init(b)
       return false
    end
 
-   --conf.filename = ubx.data_tolua(ubx.config_get_data(b, "filename"))
-   --conf.timestamp = ubx.data_tolua(ubx.config_get_data(b, "timestamp"))
-   --print(('file_logger: reporting to file="%s"'):format(conf.filename))
+   --filename = ubx.data_tolua(ubx.config_get_data(b, "filename_str"))
+   --timestamp = ubx.data_tolua(ubx.config_get_data(b, "timestamp"))
+   --timestamp = ubx.data_tolua(timestamp_str)
+   print(('file_logger: reporting to file="%s"'):format(filename))
    --- create tot_conf from string
-   print("Before error?")
    tot_conf = port_conf_to_conflist(tot_conf_str, b)
-   print("DONE!")
    return true
 end
 
 --- start: create new hdf5 file
 function start(b)
    print("creating file")
-   conf.file = hdf5.create_file(conf.filename)
+   --conf.file = hdf5.create_file(conf.filename)
+   tot_conf.file = hdf5.create_file(filename)
    return true
 end
 
@@ -204,13 +208,14 @@ function step(b)
    -- at the moment this is ubx.clock_mono_gettime()
    --- create group according to time
    local base_group
-   if conf.timestamp~=0 then
-      base_group = conf.file:create_group(("%f"):format(get_time()))
+   if timestamp~=0 then
+      base_group = tot_conf.file:create_group(("%f"):format(get_time()))
    else
       -- TODO if no timestamp we need to create states
       -- |-> starting from 000000?
-      base_group = conf.file
+      base_group = tot_conf.file
    end
+   print('step finished')
    
 end
 
@@ -220,7 +225,7 @@ function cleanup(b)
    local ni = b.ni
 
    -- cleanup connections and remove ports
-   for i,c in ipairs(conf.list) do
+   for i,c in ipairs(tot_conf) do
       if c.type == 'iblock' then
          ubx.port_disconnect_in(b:p(c.p_rep_name), ni:b(c.bname))
          b:port_rm(c.p_rep_name)
@@ -235,8 +240,8 @@ function cleanup(b)
       end
    end
    print("closing file")
-   conf.file:flush_file()
-   conf=nil
+   tot_conf.file:flush_file()
+   tot_conf=nil
 end
 ]]
 
